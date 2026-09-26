@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "picnic": {
+      "command": "npx",
+      "args": ["-y", "mcp-picnic@1.15.1"],
+      "env": {
+        "PICNIC_USERNAME": "${PICNIC_USERNAME}",
+        "PICNIC_PASSWORD": "${PICNIC_PASSWORD}",
+        "PICNIC_COUNTRY_CODE": "${PICNIC_COUNTRY_CODE:-NL}"
+      }
+    }
+  }
+}
