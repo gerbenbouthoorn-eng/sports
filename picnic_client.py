@@ -34,7 +34,8 @@ def get_client(
     to type it in.
 
     On machines without a saved token file (e.g. a cloud session), the token
-    can instead be provided in the PICNIC_AUTH_TOKEN environment variable.
+    can instead be provided in the PICNIC_AUTH_TOKEN environment variable, or
+    injected as the x-picnic-auth header by the environment's API credentials.
     Returns an authenticated PicnicAPI instance.
     """
     country_code = country_code or os.environ.get("PICNIC_COUNTRY", "NL")
@@ -43,10 +44,11 @@ def get_client(
     if not token and os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE) as f:
             token = f.read().strip()
-    if token:
-        client = PicnicAPI(country_code=country_code, auth_token=token)
-        if _token_works(client):
-            return client
+    # With no token, this still succeeds when the environment's API
+    # credentials add the x-picnic-auth header to requests on our behalf.
+    client = PicnicAPI(country_code=country_code, auth_token=token or None)
+    if _token_works(client):
+        return client
 
     email = email or os.environ["PICNIC_EMAIL"]
     password = password or os.environ["PICNIC_PASSWORD"]
@@ -67,8 +69,8 @@ def get_client(
 
 def _token_works(client: PicnicAPI) -> bool:
     try:
-        client.get_user()
-        return True
+        # An unauthenticated reply still parses into a User, just without an id.
+        return bool(client.get_user().user_id)
     except Exception:
         return False
 
