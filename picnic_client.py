@@ -11,7 +11,7 @@ Requires: python-picnic-api2
 
 import json
 import os
-from python_picnic_api2 import PicnicAPI
+from python_picnic_api2 import PicnicAPI, Picnic2FARequired
 
 # After the first login the auth token is saved here, so you don't have to
 # send your password every time. Delete this file to force a fresh login.
@@ -29,7 +29,9 @@ def get_client(
     Credentials are read from arguments or environment variables:
         PICNIC_EMAIL, PICNIC_PASSWORD, PICNIC_COUNTRY (default "NL", or "DE")
 
-    A saved auth token (see TOKEN_FILE) is reused when present.
+    A saved auth token (see TOKEN_FILE) is reused when present. If Picnic asks
+    for two-factor authentication, a code is sent by SMS and you are prompted
+    to type it in.
     Returns an authenticated PicnicAPI instance.
     """
     country_code = country_code or os.environ.get("PICNIC_COUNTRY", "NL")
@@ -43,7 +45,12 @@ def get_client(
 
     email = email or os.environ["PICNIC_EMAIL"]
     password = password or os.environ["PICNIC_PASSWORD"]
-    client = PicnicAPI(email, password, country_code=country_code)
+    client = PicnicAPI(country_code=country_code)
+    try:
+        client.login(email, password)
+    except Picnic2FARequired:
+        client.generate_2fa_code("SMS")
+        client.verify_2fa_code(input("Picnic sent you an SMS. Enter the code: ").strip())
     if not client.logged_in():
         raise RuntimeError("Picnic login failed: check your email and password")
 
@@ -55,7 +62,8 @@ def get_client(
 
 def _token_works(client: PicnicAPI) -> bool:
     try:
-        return "user_id" in client.get_user()
+        client.get_user()
+        return True
     except Exception:
         return False
 
@@ -64,7 +72,7 @@ def _token_works(client: PicnicAPI) -> bool:
 # User
 # ---------------------------------------------------------------------------
 
-def get_user(client: PicnicAPI) -> dict:
+def get_user(client: PicnicAPI):
     """Fetch the authenticated user's account details."""
     return client.get_user()
 
@@ -73,12 +81,12 @@ def get_user(client: PicnicAPI) -> dict:
 # Products
 # ---------------------------------------------------------------------------
 
-def search(client: PicnicAPI, term: str) -> list[dict]:
+def search(client: PicnicAPI, term: str):
     """Search the product catalogue, e.g. search(client, "havermout")."""
     return client.search(term)
 
 
-def get_article(client: PicnicAPI, article_id: str) -> dict:
+def get_article(client: PicnicAPI, article_id: str):
     """Fetch details for a single product."""
     return client.get_article(article_id)
 
@@ -87,17 +95,17 @@ def get_article(client: PicnicAPI, article_id: str) -> dict:
 # Cart
 # ---------------------------------------------------------------------------
 
-def get_cart(client: PicnicAPI) -> dict:
+def get_cart(client: PicnicAPI):
     """Fetch the current shopping cart."""
     return client.get_cart()
 
 
-def add_product(client: PicnicAPI, product_id: str, count: int = 1) -> dict:
+def add_product(client: PicnicAPI, product_id: str, count: int = 1):
     """Add a product to the cart."""
     return client.add_product(product_id, count)
 
 
-def remove_product(client: PicnicAPI, product_id: str, count: int = 1) -> dict:
+def remove_product(client: PicnicAPI, product_id: str, count: int = 1):
     """Remove a product from the cart."""
     return client.remove_product(product_id, count)
 
@@ -106,17 +114,17 @@ def remove_product(client: PicnicAPI, product_id: str, count: int = 1) -> dict:
 # Deliveries
 # ---------------------------------------------------------------------------
 
-def get_delivery_slots(client: PicnicAPI) -> dict:
+def get_delivery_slots(client: PicnicAPI):
     """List available delivery time slots."""
     return client.get_delivery_slots()
 
 
-def get_deliveries(client: PicnicAPI) -> list[dict]:
+def get_deliveries(client: PicnicAPI):
     """List past and upcoming deliveries (summary)."""
     return client.get_deliveries()
 
 
-def get_delivery(client: PicnicAPI, delivery_id: str) -> dict:
+def get_delivery(client: PicnicAPI, delivery_id: str):
     """Fetch full details (including ordered items) for one delivery."""
     return client.get_delivery(delivery_id)
 
@@ -125,8 +133,17 @@ def get_delivery(client: PicnicAPI, delivery_id: str) -> dict:
 # CLI convenience
 # ---------------------------------------------------------------------------
 
+def to_plain(obj):
+    """Convert the library's result objects into plain dicts/lists."""
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump(mode="json")
+    if isinstance(obj, list):
+        return [to_plain(item) for item in obj]
+    return obj
+
+
 def print_json(obj) -> None:
-    print(json.dumps(obj, indent=2, default=str))
+    print(json.dumps(to_plain(obj), indent=2, default=str))
 
 
 if __name__ == "__main__":
