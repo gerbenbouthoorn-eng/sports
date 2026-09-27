@@ -32,13 +32,18 @@ def get_client(
     A saved auth token (see TOKEN_FILE) is reused when present. If Picnic asks
     for two-factor authentication, a code is sent by SMS and you are prompted
     to type it in.
+
+    On machines without a saved token file (e.g. a cloud session), the token
+    can instead be provided in the PICNIC_AUTH_TOKEN environment variable.
     Returns an authenticated PicnicAPI instance.
     """
     country_code = country_code or os.environ.get("PICNIC_COUNTRY", "NL")
 
-    if os.path.exists(TOKEN_FILE):
+    token = os.environ.get("PICNIC_AUTH_TOKEN")
+    if not token and os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE) as f:
             token = f.read().strip()
+    if token:
         client = PicnicAPI(country_code=country_code, auth_token=token)
         if _token_works(client):
             return client
